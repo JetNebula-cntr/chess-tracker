@@ -1,0 +1,15 @@
+# secrets
+.env
+.token
+
+# Stockfish binary (101 MB, over GitHub's file limit)
+bin/stockfish
+
+# generated data
+jetnebula.db
+jetnebula.db-*
+out/
+*.log
+
+.DS_Store
+__pycache__/

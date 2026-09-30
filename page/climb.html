@@ -1,0 +1,523 @@
+<title>Climb to 1500</title>
+<meta name="theme-color" content="#171426">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F7F6FB; --surface:#FFFFFF; --surface-2:#F1EFF9; --border:#E3E0EF;
+    --ink:#201C33; --ink-2:#5B5470; --ink-3:#8B84A0;
+    --accent:#7C6CFF; --accent-strong:#5F4DE0; --goal:#B8791E;
+    --good:#1F7A4C; --good-bg:#E4F5EC; --bad:#C22A2A; --bad-bg:#FDE8E8;
+    --draw:#8B84A0; --draw-bg:#EEECF4;
+    --ph-open:#B8791E; --ph-mid:#7C6CFF; --ph-end:#3E9AA8;
+    --font-display:'Fraunces',Georgia,'Times New Roman',serif;
+    --font-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme:dark;
+      --bg:#14121F; --surface:#1D1A2B; --surface-2:#211E33; --border:#2C2840;
+      --ink:#EDEAF7; --ink-2:#A79FC2; --ink-3:#7A7396;
+      --accent:#9385FF; --accent-strong:#B0A4FF; --goal:#D9A44A;
+      --good:#5FC98F; --good-bg:#173926; --bad:#FF8A8A; --bad-bg:#3A1D1D;
+      --draw:#A79FC2; --draw-bg:#2A2640;
+      --ph-open:#D9A44A; --ph-mid:#9385FF; --ph-end:#5CC1CF;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --bg:#14121F; --surface:#1D1A2B; --surface-2:#211E33; --border:#2C2840;
+    --ink:#EDEAF7; --ink-2:#A79FC2; --ink-3:#7A7396;
+    --accent:#9385FF; --accent-strong:#B0A4FF; --goal:#D9A44A;
+    --good:#5FC98F; --good-bg:#173926; --bad:#FF8A8A; --bad-bg:#3A1D1D;
+    --draw:#A79FC2; --draw-bg:#2A2640;
+    --ph-open:#D9A44A; --ph-mid:#9385FF; --ph-end:#5CC1CF;
+  }
+
+  *{box-sizing:border-box;}
+  body{background:var(--bg);color:var(--ink);font-family:var(--font-body);margin:0;padding:32px 18px 64px;}
+  .page{max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:24px;}
+  .eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);}
+  h1{font-family:var(--font-display);font-weight:600;font-size:clamp(28px,7vw,38px);line-height:1.1;margin:6px 0 0;text-wrap:balance;}
+  h2{font-family:var(--font-display);font-weight:600;font-size:20px;margin:0;text-wrap:balance;}
+  .card-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+  .card-head .sub{font-family:var(--font-mono);font-size:12px;color:var(--ink-3);}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;}
+  .note{margin-top:14px;font-family:var(--font-mono);font-size:11.5px;line-height:1.55;color:var(--ink-3);}
+  .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+  .pos{color:var(--good);} .neg{color:var(--bad);} .mid{color:var(--ink-2);}
+
+  /* header */
+  .stat-row{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;margin-top:18px;}
+  .big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:46px;font-weight:600;color:var(--accent-strong);line-height:1;}
+  .cap{font-size:12px;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin-top:6px;}
+  .mini{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:15px;color:var(--ink-2);line-height:1.6;}
+  .mini b{color:var(--ink);font-weight:600;}
+  .bar-track{position:relative;margin-top:16px;height:10px;border-radius:999px;background:var(--surface-2);overflow:hidden;border:1px solid var(--border);}
+  .bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent-strong),var(--accent));}
+  .bar-tick{position:absolute;top:0;bottom:0;width:2px;background:var(--ink-3);}
+  .bar-caption{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:12px;color:var(--ink-3);margin-top:6px;}
+  .pace{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;}
+  .pace div{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+  .pace .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);}
+  .pace .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:18px;font-weight:600;margin-top:3px;}
+
+  /* charts */
+  .chart-wrap{position:relative;}
+  .chart-wrap svg{display:block;width:100%;height:auto;overflow:visible;}
+  .tooltip{position:absolute;max-width:230px;background:var(--ink);color:var(--bg);font-size:12.5px;line-height:1.45;padding:10px 12px;border-radius:10px;pointer-events:none;opacity:0;transform:translate(-50%,calc(-100% - 12px));transition:opacity 120ms ease;z-index:5;white-space:nowrap;}
+  .tooltip.show{opacity:1;}
+  .tooltip b{font-family:var(--font-mono);}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--ink-3);}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px;}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+  .kpis div{border-top:2px solid var(--border);padding-top:8px;}
+  .kpis .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);}
+  .kpis .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:18px;font-weight:600;margin-top:2px;}
+  .kpis .s{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);margin-top:2px;}
+  @media (max-width:520px){ .kpis{grid-template-columns:repeat(2,1fr);} }
+
+  /* games */
+  .game-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px 14px;padding:14px 0;border-top:1px solid var(--border);}
+  .game-row:first-child{border-top:none;padding-top:2px;}
+  .badge{font-family:var(--font-mono);font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;}
+  .badge.W{background:var(--good-bg);color:var(--good);} .badge.L{background:var(--bad-bg);color:var(--bad);} .badge.D{background:var(--draw-bg);color:var(--draw);}
+  .opp{font-weight:600;font-size:14.5px;color:inherit;text-decoration:none;border-bottom:1px dotted var(--ink-3);}
+  .opp:hover{color:var(--accent-strong);border-bottom-color:var(--accent);}
+  .opp:focus-visible{outline:2px solid var(--accent-strong);outline-offset:2px;border-radius:2px;}
+  .meta{font-size:12.5px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px;}
+  .delta{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:600;font-size:14px;text-align:right;}
+  .game-note{grid-column:1/-1;font-size:13.5px;color:var(--ink-2);line-height:1.55;}
+  .chips{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;}
+  .chip{font-family:var(--font-mono);font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);border:1px solid var(--border);}
+  .chip.eng{color:var(--bad);border-color:transparent;background:var(--bad-bg);}
+  .chip.eng.clean{color:var(--good);background:var(--good-bg);}
+
+  /* rows with bars */
+  .row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:14px;padding:10px 0;border-top:1px solid var(--border);}
+  .row:first-child{border-top:none;padding-top:2px;}
+  .row .name{font-size:14px;font-weight:600;display:block;}
+  .row .bar{display:block;height:5px;border-radius:999px;background:var(--surface-2);margin-top:6px;overflow:hidden;}
+  .row .bar i{display:block;height:100%;border-radius:999px;background:var(--accent);}
+  .row .bar i.pos{background:var(--good);} .row .bar i.neg{background:var(--bad);}
+  .row .rec{font-family:var(--font-mono);font-size:11.5px;line-height:1.35;color:var(--ink-3);text-align:right;font-variant-numeric:tabular-nums;}
+  .row .val{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:600;font-size:14px;text-align:right;min-width:48px;}
+
+  /* mistakes */
+  .table-scroll{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);font-weight:500;text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);}
+  th:first-child,td:first-child{text-align:left;}
+  td{font-family:var(--font-mono);font-variant-numeric:tabular-nums;text-align:right;padding:8px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  tr.now td{color:var(--accent-strong);font-weight:600;}
+  .phase-bar{display:flex;height:14px;border-radius:999px;overflow:hidden;margin:18px 0 8px;background:var(--surface-2);}
+  .phase-bar span{display:block;height:100%;}
+  .phase-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2);}
+  .phase-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;}
+  .sub-h{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:20px 0 4px;font-family:var(--font-mono);}
+
+  /* themes */
+  .themes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px;}
+  .themes .lab{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px;}
+  .themes .working .lab{color:var(--good);} .themes .watch .lab{color:var(--goal);}
+  .themes ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px;}
+  .themes li{font-size:13.5px;line-height:1.55;color:var(--ink-2);padding-left:14px;position:relative;}
+  .themes li::before{content:"";position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5;}
+  .themes li b{color:var(--ink);font-weight:600;}
+
+  .state{padding:40px 22px;text-align:center;color:var(--ink-3);font-size:14px;}
+  footer{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-3);text-align:center;line-height:1.6;}
+  @media (prefers-reduced-motion: reduce){ .tooltip{transition:none;} }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow" id="eyebrow">JetNebula · Lichess 10+0 Rapid</div>
+    <h1>Climb to 1500</h1>
+    <div class="stat-row">
+      <div><div class="big" id="hdr-current">—</div><div class="cap">Current rating</div></div>
+      <div class="mini" id="hdr-gap">Loading your games…</div>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="bar-fill" style="width:0%"></div><div class="bar-tick" id="bar-tick" hidden></div></div>
+    <div class="bar-caption"><span id="bar-left">—</span><span id="bar-right">Goal · 1500</span></div>
+    <div class="pace" id="pace"></div>
+  </header>
+
+  <section class="card" aria-labelledby="h-mom">
+    <div class="card-head"><h2 id="h-mom">Month by month</h2><span class="sub" id="mom-sub"></span></div>
+    <div class="chart-wrap" id="mom-wrap">
+      <svg id="mom-svg" viewBox="0 0 640 300" role="img" aria-label="Month-end rating for every month on record, with each month's high and low"></svg>
+      <div class="tooltip" id="mom-tip"></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--accent)"></i>Month-end rating</span>
+      <span><i style="background:var(--ink-3);border-radius:1px;width:3px"></i>Month high–low</span>
+      <span><i style="background:transparent;border:2px solid var(--accent)"></i>This month so far</span>
+    </div>
+    <div class="note" id="mom-note"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-now">
+    <div class="card-head"><h2 id="h-now">This month</h2><span class="sub" id="now-sub"></span></div>
+    <div class="kpis" id="now-kpis"></div>
+    <div class="chart-wrap" id="now-wrap">
+      <svg id="now-svg" viewBox="0 0 640 260" role="img" aria-label="Rating after every game this month"></svg>
+      <div class="tooltip" id="now-tip"></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--good)"></i>Win</span>
+      <span><i style="background:var(--bad)"></i>Loss</span>
+      <span><i style="background:var(--draw)"></i>Draw</span>
+      <span><i style="background:var(--ink-3);border-radius:1px;height:2px;width:14px;vertical-align:3px"></i>Month start</span>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="h-games">
+    <div class="card-head"><h2 id="h-games">Last 10 games</h2><span class="sub">newest first</span></div>
+    <div id="games-list"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-mis">
+    <div class="card-head"><h2 id="h-mis">Mistakes</h2><span class="sub" id="mis-sub"></span></div>
+    <div class="table-scroll"><table id="mis-table"></table></div>
+    <div class="sub-h">Where your losses turned</div>
+    <div class="phase-bar" id="phase-bar"></div>
+    <div class="phase-legend" id="phase-legend"></div>
+    <div class="note" id="mis-note"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-motifs">
+    <div class="card-head"><h2 id="h-motifs">What keeps beating you</h2><span class="sub" id="motif-sub"></span></div>
+    <div id="motif-list"></div>
+    <div class="note" id="motif-note"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-open">
+    <div class="card-head"><h2 id="h-open">Openings</h2><span class="sub">all time · this month</span></div>
+    <div id="open-list"></div>
+    <div class="note" id="open-note"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-sess">
+    <div class="card-head"><h2 id="h-sess">How long you play</h2><span class="sub">score by game of session</span></div>
+    <div id="sess-list"></div>
+    <div class="note">A session is any run of games with less than an hour between them.</div>
+  </section>
+
+  <section class="card" aria-labelledby="h-themes">
+    <div class="card-head"><h2 id="h-themes">Patterns so far</h2><span class="sub" id="themes-sub"></span></div>
+    <div class="themes">
+      <div class="working"><div class="lab">Working well</div><ul id="working"></ul></div>
+      <div class="watch"><div class="lab">Keep an eye on</div><ul id="watch"></ul></div>
+    </div>
+  </section>
+
+  <footer id="footer">Waiting for data…</footer>
+</div>
+
+<script>
+(function(){
+  var S = {months:{}, current:{}, notes:{}, meta:null, themes:null};
+  var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function sgn(n){ return (n>0?'+':n<0?'−':'±')+Math.abs(n); }
+  function cls(n){ return n>0?'pos':n<0?'neg':'mid'; }
+  function score(b){ return b && b.n ? Math.round((b.w + b.d/2)/b.n*100) : null; }
+  function band(s){ return s>=55?'pos':s<=45?'neg':''; }
+  function monLabel(mk, withYear){ var p=mk.split('-'); return MON[+p[1]-1]+(withYear?' '+p[0].slice(2):''); }
+  function day(ts){ var d=new Date(ts); return MON[d.getMonth()]+' '+d.getDate(); }
+  function sumBuckets(list, key){
+    var out={};
+    list.forEach(function(m){ var o=m[key]||{}; Object.keys(o).forEach(function(k){
+      var b=out[k]||(out[k]={n:0,w:0,l:0,d:0}); ['n','w','l','d'].forEach(function(f){ b[f]+=o[k][f]||0; });
+    });});
+    return out;
+  }
+  function sumCounts(list, pick){
+    var out={}; list.forEach(function(m){ var o=pick(m)||{}; Object.keys(o).forEach(function(k){ out[k]=(out[k]||0)+o[k]; }); });
+    return out;
+  }
+  function tipAt(tip, wrap, W, x, y, html){
+    var s = wrap.clientWidth / W;
+    var left = Math.max(80, Math.min(wrap.clientWidth-80, x*s));
+    tip.style.left = left+'px'; tip.style.top = (y*s)+'px'; tip.innerHTML = html; tip.classList.add('show');
+  }
+
+  function render(){
+    var meta = S.meta;
+    if (!meta) return;
+    var months = Object.keys(S.months).sort().map(function(k){ return S.months[k]; });
+    var played = months.filter(function(m){ return m.games; });
+    var cur = Object.keys(S.current).map(function(k){ return S.current[k]; }).sort(function(a,b){ return a.createdAt-b.createdAt; });
+    var curMonth = S.months[meta.currentMonth] || {games:0};
+    renderHeader(meta, curMonth);
+    renderMoM(months, meta);
+    renderNow(cur, curMonth, months, meta);
+    renderGames();
+    renderMistakes(played, meta);
+    renderMotifs(played);
+    renderOpenings(played, curMonth);
+    renderSessions(played);
+    renderThemes();
+    var eng = played.reduce(function(a,m){ return a+((m.engine||{}).games||0); },0);
+    $('footer').innerHTML = esc(meta.games)+' rated 10+0 games · '+eng+' analysed by Stockfish 19 · '+
+      played.length+' months with games, '+(months.length-played.length)+' without<br>Updated '+
+      new Date(meta.generatedAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  }
+
+  function renderHeader(meta, curMonth){
+    var goal = meta.goal, cur = meta.current, gap = goal-cur;
+    $('hdr-current').textContent = cur;
+    $('hdr-gap').innerHTML = '<b>'+gap+'</b> points to go<br>peak '+meta.peak+' · low '+meta.low;
+    var floor = meta.low;
+    function pos(v){ return Math.max(0, Math.min(100, (v-floor)/(goal-floor)*100)); }
+    $('bar-fill').style.width = pos(cur)+'%';
+    $('bar-tick').style.left = pos(meta.peak)+'%'; $('bar-tick').hidden = false;
+    $('bar-tick').title = 'Peak '+meta.peak;
+    $('bar-left').textContent = floor+' low · peak '+meta.peak;
+    $('bar-right').textContent = 'Goal · '+goal;
+    var target = new Date(meta.targetDate+'T23:59:59');
+    var monthsLeft = Math.max(0.1, (target - Date.now())/(1000*60*60*24*30.44));
+    var need = Math.ceil(gap/monthsLeft);
+    var net = curMonth.net||0;
+    $('pace').innerHTML =
+      '<div><div class="k">Target</div><div class="v">'+day(target.getTime())+' '+target.getFullYear()+'</div></div>'+
+      '<div><div class="k">Needed per month</div><div class="v">'+(gap>0?'+'+need:'Reached')+'</div></div>'+
+      '<div><div class="k">'+monLabel(meta.currentMonth)+' so far</div><div class="v '+cls(net)+'">'+sgn(net)+'</div></div>';
+  }
+
+  function renderMoM(months, meta){
+    var W=640,H=300,L=40,R=16,T=18,B=64, pw=W-L-R, ph=H-T-B;
+    var goal = meta.goal;
+    var vals=[]; months.forEach(function(m){ if(m.games){ vals.push(m.end); if(m.low) vals.push(m.low); if(m.peak) vals.push(m.peak); } else if(m.end) vals.push(m.end); });
+    var yMin = Math.floor((Math.min.apply(null, vals)-20)/50)*50, yMax = Math.max(goal, Math.max.apply(null, vals))+20;
+    var n = months.length, step = pw/n;
+    function x(i){ return L + step*(i+.5); }
+    function y(v){ return T + ph - (v-yMin)/(yMax-yMin)*ph; }
+    var p=[];
+    for (var t=Math.ceil(yMin/100)*100; t<=yMax; t+=100){
+      p.push('<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(t).toFixed(1)+'" y2="'+y(t).toFixed(1)+'" stroke="var(--border)" stroke-width="1"/>');
+      p.push('<text x="'+(L-6)+'" y="'+(y(t)+4).toFixed(1)+'" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="var(--ink-3)">'+t+'</text>');
+    }
+    p.push('<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(goal).toFixed(1)+'" y2="'+y(goal).toFixed(1)+'" stroke="var(--goal)" stroke-width="2" stroke-dasharray="5 5"/>');
+    p.push('<text x="'+(W-R)+'" y="'+(y(goal)-6).toFixed(1)+'" text-anchor="end" font-family="IBM Plex Mono" font-size="11" fill="var(--goal)">goal '+goal+'</text>');
+    // games-per-month strip
+    var maxG = Math.max.apply(null, months.map(function(m){ return m.games; }))||1;
+    var stripT = H-B+22, stripH = 22;
+    months.forEach(function(m,i){
+      if (m.games){
+        var h = Math.max(2, m.games/maxG*stripH);
+        p.push('<rect x="'+(x(i)-step*.3).toFixed(1)+'" y="'+(stripT+stripH-h).toFixed(1)+'" width="'+(step*.6).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1.5" fill="var(--ink-3)" opacity=".35"/>');
+      }
+      var showLab = n<=12 || i%2===(n-1)%2 || i===n-1;
+      if (showLab) p.push('<text x="'+x(i).toFixed(1)+'" y="'+(H-B+14)+'" text-anchor="middle" font-family="IBM Plex Sans" font-size="10" fill="var(--ink-3)">'+monLabel(m.month, m.month.slice(5)==='01'||i===0)+'</text>');
+    });
+    p.push('<text x="'+(L-6)+'" y="'+(stripT+stripH-2)+'" text-anchor="end" font-family="IBM Plex Mono" font-size="9" fill="var(--ink-3)">games</text>');
+    // whiskers
+    months.forEach(function(m,i){
+      if (m.games && m.peak && m.low) p.push('<line x1="'+x(i).toFixed(1)+'" x2="'+x(i).toFixed(1)+'" y1="'+y(m.peak).toFixed(1)+'" y2="'+y(m.low).toFixed(1)+'" stroke="var(--ink-3)" stroke-width="3" stroke-linecap="round" opacity=".45"/>');
+    });
+    // month-end line: solid between played months, dashed across gaps
+    var prev=null;
+    months.forEach(function(m,i){
+      if (!m.games) return;
+      if (prev){
+        var gapped = i-prev.i>1;
+        p.push('<line x1="'+x(prev.i).toFixed(1)+'" y1="'+y(prev.v).toFixed(1)+'" x2="'+x(i).toFixed(1)+'" y2="'+y(m.end).toFixed(1)+'" stroke="var(--accent)" stroke-width="2" '+(gapped?'stroke-dasharray="3 4" opacity=".6"':'')+'/>');
+      }
+      prev={i:i,v:m.end};
+    });
+    months.forEach(function(m,i){
+      if (!m.games) return;
+      var open = !m.closed;
+      p.push('<circle cx="'+x(i).toFixed(1)+'" cy="'+y(m.end).toFixed(1)+'" r="'+(open?5.5:4.5)+'" fill="'+(open?'var(--surface)':'var(--accent)')+'" stroke="var(--accent-strong)" stroke-width="2"/>');
+    });
+    var last = months[months.length-1];
+    if (last && last.end) p.push('<text x="'+(x(n-1)-9).toFixed(1)+'" y="'+(y(last.end)-10).toFixed(1)+'" text-anchor="end" font-family="IBM Plex Mono" font-size="12" font-weight="600" fill="var(--accent-strong)">'+last.end+'</text>');
+    months.forEach(function(m,i){
+      p.push('<rect class="hit" data-i="'+i+'" x="'+(x(i)-step/2).toFixed(1)+'" y="'+T+'" width="'+step.toFixed(1)+'" height="'+(H-T).toFixed(1)+'" fill="transparent"/>');
+    });
+    var svg=$('mom-svg'); svg.innerHTML=p.join('');
+    var wrap=$('mom-wrap'), tip=$('mom-tip');
+    svg.onpointermove=function(e){
+      var r=e.target.getAttribute&&e.target.getAttribute('data-i'); if(r==null) return;
+      var m=months[+r]; var yy = m.end ? y(m.end) : T+ph/2;
+      var e2 = m.engine||{};
+      var html = '<b>'+monLabel(m.month,true)+(m.closed?'':' · so far')+'</b><br>'+
+        (m.games ? 'Ended '+m.end+' ('+sgn(m.net)+')<br>'+m.games+' games · '+m.w+'–'+m.l+'–'+m.d+
+          (m.peak?'<br>High '+m.peak+' · low '+m.low:'')+
+          (e2.games?'<br>'+(e2.blunders/e2.games).toFixed(1)+' blunders per game':'')
+        : 'No games · held at '+(m.end||'—'));
+      tipAt(tip, wrap, W, x(+r), yy, html);
+    };
+    svg.onpointerleave=function(){ tip.classList.remove('show'); };
+    var closed = months.filter(function(m){ return m.closed && m.games; });
+    $('mom-sub').textContent = months.length ? monLabel(months[0].month,true)+' – '+monLabel(last.month,true) : '';
+    var best = closed.slice().sort(function(a,b){ return b.net-a.net; })[0];
+    var worst = closed.slice().sort(function(a,b){ return a.net-b.net; })[0];
+    $('mom-note').innerHTML = 'Each closed month is frozen once it ends. '+
+      (best ? 'Best month: '+monLabel(best.month,true)+' at '+sgn(best.net)+'. ' : '')+
+      (worst ? 'Toughest: '+monLabel(worst.month,true)+' at '+sgn(worst.net)+' (Mar 25 includes Lichess placing a new account, which starts everyone at 1500). ' : '')+
+      'Dashed stretches are months with no games — the rating simply held.';
+  }
+
+  function renderNow(cur, curMonth, months, meta){
+    var W=640,H=260,L=40,R=16,T=16,B=36, pw=W-L-R, ph=H-T-B;
+    $('now-sub').textContent = monLabel(meta.currentMonth,true);
+    var prevClosed = months.filter(function(m){ return m.closed && m.games && m.engine && m.engine.games; }).slice(-1)[0];
+    var bpg = cur.filter(function(g){ return g.blunders!=null; });
+    var curBpg = bpg.length ? bpg.reduce(function(a,g){ return a+g.blunders; },0)/bpg.length : null;
+    var prevBpg = prevClosed ? prevClosed.engine.blunders/prevClosed.engine.games : null;
+    var sc = score(curMonth);
+    $('now-kpis').innerHTML =
+      '<div><div class="k">Games</div><div class="v">'+(curMonth.games||0)+'</div><div class="s">'+(curMonth.w||0)+'W '+(curMonth.l||0)+'L '+(curMonth.d||0)+'D</div></div>'+
+      '<div><div class="k">Net</div><div class="v '+cls(curMonth.net||0)+'">'+sgn(curMonth.net||0)+'</div><div class="s">from '+(curMonth.start||'—')+'</div></div>'+
+      '<div><div class="k">Score</div><div class="v">'+(sc==null?'—':sc+'%')+'</div><div class="s">high '+(curMonth.peak||'—')+'</div></div>'+
+      '<div><div class="k">Blunders / game</div><div class="v">'+(curBpg==null?'—':curBpg.toFixed(1))+'</div><div class="s">'+(prevBpg==null?(bpg.length+' of '+cur.length+' analysed'):monLabel(prevClosed.month)+': '+prevBpg.toFixed(1))+'</div></div>';
+    var svg=$('now-svg');
+    if (!cur.length){ svg.innerHTML='<text x="320" y="130" text-anchor="middle" font-family="IBM Plex Sans" font-size="13" fill="var(--ink-3)">No games yet this month</text>'; return; }
+    var start = curMonth.start || cur[0].rating - cur[0].delta;
+    var pts = [start].concat(cur.map(function(g){ return g.rating; }));
+    var yMin = Math.min.apply(null, pts)-12, yMax = Math.max.apply(null, pts)+12;
+    function x(i){ return L + (pts.length===1?pw/2:i/(pts.length-1)*pw); }
+    function y(v){ return T + ph - (v-yMin)/(yMax-yMin)*ph; }
+    var p=[];
+    var tstep = (yMax-yMin)>120?50:(yMax-yMin)>50?25:10;
+    for (var t=Math.ceil(yMin/tstep)*tstep; t<=yMax; t+=tstep){
+      p.push('<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(t).toFixed(1)+'" y2="'+y(t).toFixed(1)+'" stroke="var(--border)"/>');
+      p.push('<text x="'+(L-6)+'" y="'+(y(t)+4).toFixed(1)+'" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="var(--ink-3)">'+t+'</text>');
+    }
+    // day separators
+    var lastDay=null, labX=-99;
+    cur.forEach(function(g,i){
+      var d=day(g.createdAt);
+      if (d!==lastDay){
+        var xx=x(i+.5);
+        if (i>0) p.push('<line x1="'+xx.toFixed(1)+'" x2="'+xx.toFixed(1)+'" y1="'+T+'" y2="'+(T+ph)+'" stroke="var(--border)" stroke-dasharray="2 3"/>');
+        if (xx-labX>34){ p.push('<text x="'+(xx+3).toFixed(1)+'" y="'+(H-B+16)+'" font-family="IBM Plex Sans" font-size="10" fill="var(--ink-3)">'+d+'</text>'); labX=xx; }
+        lastDay=d;
+      }
+    });
+    p.push('<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(start).toFixed(1)+'" y2="'+y(start).toFixed(1)+'" stroke="var(--ink-3)" stroke-width="1.5" opacity=".7"/>');
+    p.push('<text x="'+(L+4)+'" y="'+(y(start)-5).toFixed(1)+'" font-family="IBM Plex Mono" font-size="10" fill="var(--ink-3)">start '+start+'</text>');
+    var area = 'M'+x(0).toFixed(1)+','+y(pts[0]).toFixed(1)+pts.slice(1).map(function(v,i){ return ' L'+x(i+1).toFixed(1)+','+y(v).toFixed(1); }).join('');
+    p.push('<path d="'+area+' L'+x(pts.length-1).toFixed(1)+','+(T+ph)+' L'+x(0).toFixed(1)+','+(T+ph)+' Z" fill="var(--accent)" opacity=".08"/>');
+    p.push('<path d="'+area+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>');
+    var r = cur.length>45?2.6:3.4;
+    cur.forEach(function(g,i){
+      var c = g.result==='W'?'var(--good)':g.result==='L'?'var(--bad)':'var(--draw)';
+      p.push('<circle cx="'+x(i+1).toFixed(1)+'" cy="'+y(g.rating).toFixed(1)+'" r="'+r+'" fill="'+c+'" stroke="var(--surface)" stroke-width="1"/>');
+    });
+    var lg=cur[cur.length-1];
+    p.push('<text x="'+(x(pts.length-1)-6).toFixed(1)+'" y="'+(y(lg.rating)-9).toFixed(1)+'" text-anchor="end" font-family="IBM Plex Mono" font-size="12" font-weight="600" fill="var(--accent-strong)">'+lg.rating+'</text>');
+    p.push('<rect id="now-hit" x="'+L+'" y="'+T+'" width="'+pw+'" height="'+ph+'" fill="transparent"/>');
+    svg.innerHTML=p.join('');
+    var wrap=$('now-wrap'), tip=$('now-tip');
+    svg.onpointermove=function(e){
+      var rect=svg.getBoundingClientRect(); var xx=(e.clientX-rect.left)/rect.width*W;
+      var i=Math.round((xx-L)/pw*(pts.length-1)); i=Math.max(1,Math.min(pts.length-1,i));
+      var g=cur[i-1];
+      tipAt(tip, wrap, W, x(i), y(g.rating), '<b>Game '+g.num+' · '+g.result+' '+sgn(g.delta)+'</b><br>'+esc(g.opp)+' ('+g.oppRating+') · '+g.color+'<br>'+esc(g.family)+' · '+g.moves+' moves'+
+        (g.blunders!=null?'<br>'+g.blunders+' blunder'+(g.blunders===1?'':'s')+(g.turningPhase&&g.result!=='W'?' · turned in the '+g.turningPhase:''):''));
+    };
+    svg.onpointerleave=function(){ tip.classList.remove('show'); };
+  }
+
+  function renderGames(){
+    var list = Object.keys(S.notes).map(function(k){ return S.notes[k]; }).sort(function(a,b){ return b.createdAt-a.createdAt; }).slice(0,10);
+    $('games-list').innerHTML = list.length ? list.map(function(g){
+      var chips = (g.tags||[]).map(function(t){ return '<span class="chip">'+esc(t)+'</span>'; });
+      if (g.blunders!=null) chips.unshift('<span class="chip eng'+(g.blunders?'':' clean')+'">'+(g.blunders?g.blunders+' blunder'+(g.blunders===1?'':'s'):'no blunders')+'</span>');
+      return '<div class="game-row">'+
+        '<span class="badge '+g.result+'">'+g.result+'</span>'+
+        '<span><a class="opp" href="https://lichess.org/'+esc(g.id)+'" target="_blank" rel="noopener">'+esc(g.opp)+'</a> <span class="meta">'+esc(g.oppRating)+'</span>'+
+        '<div class="meta">'+monLabel(g.month)+' game '+g.num+' · '+g.color+' · '+day(g.createdAt)+' · '+esc(g.opening)+'</div></span>'+
+        '<span class="delta '+cls(g.delta)+'">'+sgn(g.delta)+'</span>'+
+        '<div class="game-note">'+g.note+'</div>'+
+        (chips.length?'<div class="chips">'+chips.join('')+'</div>':'')+
+      '</div>';
+    }).join('') : '<div class="state">No annotated games yet.</div>';
+  }
+
+  function renderMistakes(played, meta){
+    var rows = played.filter(function(m){ return m.engine && m.engine.games; });
+    var total = played.reduce(function(a,m){ return a+m.games; },0);
+    var analysed = rows.reduce(function(a,m){ return a+m.engine.games; },0);
+    $('mis-sub').textContent = analysed+' of '+total+' games analysed';
+    if (!rows.length){ $('mis-table').innerHTML='<tr><td class="state">Stockfish analysis is still running.</td></tr>'; return; }
+    var show = rows.slice(-8);
+    $('mis-table').innerHTML = '<thead><tr><th>Month</th><th>Games</th><th>Blunders / g</th><th>Mistakes / g</th><th>Avg loss / move</th><th>1st blunder</th></tr></thead><tbody>'+
+      show.map(function(m){
+        var e=m.engine;
+        return '<tr'+(m.closed?'':' class="now"')+'><td>'+monLabel(m.month,true)+(m.closed?'':' ·')+'</td><td>'+e.games+'</td><td>'+(e.blunders/e.games).toFixed(1)+'</td><td>'+(e.mistakes/e.games).toFixed(1)+'</td><td>'+(e.moves?Math.round(e.cpl_sum/e.moves):'—')+'</td><td>'+(e.firstBlunderGames?'move '+Math.round(e.firstBlunderSum/e.firstBlunderGames):'—')+'</td></tr>';
+      }).join('')+'</tbody>';
+    var ph = sumCounts(rows, function(m){ return m.engine.lossPhase; });
+    var tot = (ph.opening||0)+(ph.middlegame||0)+(ph.endgame||0);
+    var parts=[['opening','Opening (moves 1–15)','--ph-open'],['middlegame','Middlegame','--ph-mid'],['endgame','Endgame','--ph-end']];
+    $('phase-bar').innerHTML = tot ? parts.map(function(p){ return '<span style="width:'+((ph[p[0]]||0)/tot*100)+'%;background:var('+p[2]+')" title="'+p[1]+'"></span>'; }).join('') : '';
+    $('phase-legend').innerHTML = parts.map(function(p){ return '<span><i style="background:var('+p[2]+')"></i>'+p[1]+' <b class="num">'+(tot?Math.round((ph[p[0]]||0)/tot*100):0)+'%</b> <span class="num" style="color:var(--ink-3)">('+(ph[p[0]]||0)+')</span></span>'; }).join('');
+    $('mis-note').textContent = 'A blunder is a move that cuts your winning chances by 30 points or more on Lichess’s scale; a mistake, 20. '+
+      '“Where your losses turned” places the single most costly move of each loss or draw ('+tot+' games so far). Figures cover analysed games only.';
+  }
+
+  function renderMotifs(played){
+    var mc = sumCounts(played, function(m){ return m.motifs; });
+    var keys = Object.keys(mc).sort(function(a,b){ return mc[b]-mc[a]; });
+    var max = keys.length ? mc[keys[0]] : 1;
+    var tagged = Object.keys(S.notes).length;
+    $('motif-sub').textContent = 'losses and draws';
+    $('motif-list').innerHTML = keys.length ? keys.map(function(k){
+      return '<div class="row"><span><span class="name">'+esc(k)+'</span><span class="bar"><i class="neg" style="width:'+(mc[k]/max*100)+'%"></i></span></span><span class="rec"></span><span class="val">'+mc[k]+'×</span></div>';
+    }).join('') : '<div class="state">No tagged losses yet.</div>';
+    $('motif-note').textContent = 'Counted from the tags on each annotated loss or draw. Tagging started with September 2026’s games, so earlier months are not counted yet.';
+  }
+
+  function renderOpenings(played, curMonth){
+    var all = sumBuckets(played, 'openings');
+    var total = played.reduce(function(a,m){ return a+m.games; },0);
+    var ov = played.reduce(function(a,m){ a.w+=m.w; a.d+=m.d; a.n+=m.games; return a; },{w:0,d:0,n:0});
+    var keys = Object.keys(all).filter(function(k){ return all[k].n>=5; }).sort(function(a,b){ return score(all[a])-score(all[b]); });
+    var cm = curMonth.openings||{};
+    $('open-list').innerHTML = keys.map(function(k){
+      var b=all[k], s=score(b), c=cm[k];
+      return '<div class="row"><span><span class="name">'+esc(k)+'</span><span class="bar"><i class="'+band(s)+'" style="width:'+s+'%"></i></span></span>'+
+        '<span class="rec">'+b.w+'–'+b.l+(b.d?'–'+b.d:'')+' · '+b.n+'g<br>'+(c?'this month '+c.w+'–'+c.l+(c.d?'–'+c.d:''):'not played this month')+'</span>'+
+        '<span class="val '+band(s)+'">'+s+'%</span></div>';
+    }).join('');
+    $('open-note').textContent = 'Score = wins plus half of draws, across all '+total+' games (openings with at least 5 games). Your overall average is '+score(ov)+'%, so rows near it are noise.';
+  }
+
+  function renderSessions(played){
+    var all = sumBuckets(played, 'session');
+    $('sess-list').innerHTML = ['1','2','3','4','5+'].filter(function(k){ return all[k]; }).map(function(k){
+      var s=score(all[k]);
+      return '<div class="row"><span><span class="name">Game '+k+' of a session</span><span class="bar"><i class="'+band(s)+'" style="width:'+s+'%"></i></span></span><span class="rec">'+all[k].n+'g</span><span class="val '+band(s)+'">'+s+'%</span></div>';
+    }).join('');
+  }
+
+  function renderThemes(){
+    var t = S.themes;
+    if (!t) return;
+    $('themes-sub').textContent = 'as of '+day(new Date(t.asOf+'T12:00:00').getTime());
+    $('working').innerHTML = (t.working||[]).map(function(x){ return '<li>'+x+'</li>'; }).join('');
+    $('watch').innerHTML = (t.watch||[]).map(function(x){ return '<li>'+x+'</li>'; }).join('');
+  }
+
+  var pending=false;
+  function schedule(){ if(pending) return; pending=true; requestAnimationFrame(function(){ pending=false; render(); }); }
+  function intoMap(key){ return function(snap){ var m={}; snap.docs.forEach(function(d){ m[d.id]=d.data(); }); S[key]=m; schedule(); }; }
+  function fail(){ $('hdr-gap').textContent='Your game data couldn’t load in this view. Open the page on claude.ai while signed in.'; $('footer').textContent=''; }
+
+  if (!window.claude || !window.claude.use){ fail(); return; }
+  window.claude.use('db').then(function(db){
+    if (!db){ fail(); return; }
+    db.collection('months').onSnapshot(intoMap('months'), fail);
+    db.collection('current').onSnapshot(intoMap('current'), fail);
+    db.collection('notes').onSnapshot(intoMap('notes'), fail);
+    db.doc('meta/summary').onSnapshot(function(s){ S.meta = s.exists ? s.data() : null; if(!S.meta){ $('hdr-gap').textContent='No data yet — the first sync hasn’t run.'; } schedule(); }, fail);
+    db.doc('themes/current').onSnapshot(function(s){ S.themes = s.exists ? s.data() : null; schedule(); }, fail);
+  }, fail);
+})();
+</script>
