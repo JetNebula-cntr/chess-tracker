@@ -8,6 +8,7 @@ Re-running is harmless; games are upserted by Lichess id.
     python3 load.py --full    # re-fetch everything
 """
 import json
+import os
 import sqlite3
 import sys
 import time
@@ -100,12 +101,16 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 
 
 def token():
-    for line in (DIR / ".env").read_text().splitlines():
+    t = os.environ.get("LICHESS_TOKEN", "").strip()
+    if t.startswith("lip_"):
+        return t
+    env = DIR / ".env"
+    for line in (env.read_text().splitlines() if env.exists() else []):
         if line.startswith("LICHESS_TOKEN="):
             t = line.split("=", 1)[1].strip()
             if t.startswith("lip_"):
                 return t
-    sys.exit("No valid LICHESS_TOKEN in .env")
+    sys.exit("No valid LICHESS_TOKEN in the environment or .env")
 
 
 def fetch(since=None):

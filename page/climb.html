@@ -1,3 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Climb to 1500</title>
 <meta name="theme-color" content="#171426">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -130,6 +135,8 @@
   footer{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-3);text-align:center;line-height:1.6;}
   @media (prefers-reduced-motion: reduce){ .tooltip{transition:none;} }
 </style>
+</head>
+<body>
 
 <div class="page">
   <header>
@@ -508,16 +515,19 @@
   var pending=false;
   function schedule(){ if(pending) return; pending=true; requestAnimationFrame(function(){ pending=false; render(); }); }
   function intoMap(key){ return function(snap){ var m={}; snap.docs.forEach(function(d){ m[d.id]=d.data(); }); S[key]=m; schedule(); }; }
-  function fail(){ $('hdr-gap').textContent='Your game data couldn’t load in this view. Open the page on claude.ai while signed in.'; $('footer').textContent=''; }
+  function fail(){ $('hdr-gap').textContent='Your game data couldn’t load. Try refreshing in a minute.'; $('footer').textContent=''; }
 
-  if (!window.claude || !window.claude.use){ fail(); return; }
-  window.claude.use('db').then(function(db){
-    if (!db){ fail(); return; }
-    db.collection('months').onSnapshot(intoMap('months'), fail);
-    db.collection('current').onSnapshot(intoMap('current'), fail);
-    db.collection('notes').onSnapshot(intoMap('notes'), fail);
-    db.doc('meta/summary').onSnapshot(function(s){ S.meta = s.exists ? s.data() : null; if(!S.meta){ $('hdr-gap').textContent='No data yet — the first sync hasn’t run.'; } schedule(); }, fail);
-    db.doc('themes/current').onSnapshot(function(s){ S.themes = s.exists ? s.data() : null; schedule(); }, fail);
-  }, fail);
+  fetch('docs.json', {cache: 'no-store'}).then(function(r){ if(!r.ok) throw r; return r.json(); }).then(function(docs){
+    docs.forEach(function(d){
+      var parts = d.path.split('/');
+      if (d.path === 'meta/summary') S.meta = d.data;
+      else if (d.path === 'themes/current') S.themes = d.data;
+      else if (S[parts[0]]) S[parts[0]][parts[1]] = d.data;
+    });
+    if(!S.meta){ $('hdr-gap').textContent='No data yet — the first sync hasn’t run.'; }
+    schedule();
+  }).catch(fail);
 })();
 </script>
+</body>
+</html>

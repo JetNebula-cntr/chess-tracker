@@ -1,0 +1,92 @@
+name: Sync and publish
+
+# Every 3 hours: fetch new Lichess games, analyse them with Stockfish, rebuild
+# the page data, and deploy the page to GitHub Pages. The database lives as an
+# asset on the "data" release (replaced in place, so git history stays small).
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["page/**", "rollup.py", ".github/workflows/sync.yml"]
+
+permissions:
+  contents: write   # replace the database asset on the data release
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+env:
+  TZ: America/Los_Angeles   # months and "current month" follow local time
+  STOCKFISH_VERSION: sf_19
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install chess==1.11.2
+
+      - name: Install Stockfish
+        run: |
+          curl -sSL -o sf.tar.gz "https://github.com/official-stockfish/Stockfish/releases/download/${STOCKFISH_VERSION}/stockfish-linux-x86-64-universal.tar.gz"
+          mkdir -p sf && tar -xzf sf.tar.gz -C sf
+          bin=$(find sf -type f -name 'stockfish*' -perm -u+x | head -1)
+          echo "STOCKFISH=$PWD/$bin" >> "$GITHUB_ENV"
+          echo "STOCKFISH_THREADS=$(nproc)" >> "$GITHUB_ENV"
+
+      - name: Download database
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download data -p jetnebula.db
+          echo "BEFORE=$(python -c "import sqlite3; print(sqlite3.connect('jetnebula.db').execute('SELECT (SELECT COUNT(*) FROM games), (SELECT COUNT(*) FROM analysis)').fetchone())")" >> "$GITHUB_ENV"
+
+      - name: Fetch new games
+        if: github.event_name != 'push'
+        env:
+          LICHESS_TOKEN: ${{ secrets.LICHESS_TOKEN }}
+        run: python load.py
+
+      - name: Analyse
+        if: github.event_name != 'push'
+        run: python analyze.py
+
+      - name: Build page data
+        run: |
+          python rollup.py
+          mkdir -p site
+          cp page/climb.html site/index.html
+          cp out/docs.json site/docs.json
+
+      - name: Upload database
+        if: github.event_name != 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          after=$(python -c "import sqlite3; print(sqlite3.connect('jetnebula.db').execute('SELECT (SELECT COUNT(*) FROM games), (SELECT COUNT(*) FROM analysis)').fetchone())")
+          if [ "$after" = "$BEFORE" ]; then
+            echo "No new games"
+          else
+            gh release upload data jetnebula.db --clobber
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

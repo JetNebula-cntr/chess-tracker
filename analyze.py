@@ -13,6 +13,7 @@ already-lost position is not over-counted.
     inaccuracy >= 0.10, mistake >= 0.20, blunder >= 0.30  (on a -1..1 scale)
 """
 import math
+import os
 import sqlite3
 import sys
 import time
@@ -23,9 +24,9 @@ import chess.engine
 
 DIR = Path(__file__).resolve().parent
 DB_PATH = DIR / "jetnebula.db"
-ENGINE_PATH = DIR / "bin" / "stockfish"
+ENGINE_PATH = os.environ.get("STOCKFISH", str(DIR / "bin" / "stockfish"))
 DEPTH = 14
-THREADS = 6
+THREADS = int(os.environ.get("STOCKFISH_THREADS", "6"))
 HASH_MB = 256
 CP_CAP = 1000
 MATE_CP = 10_000
@@ -129,7 +130,7 @@ def analyse_game(engine, db, game_id, color, moves_san):
            (game_id, engine, depth, inaccuracies, mistakes, blunders, first_blunder_move,
             turning_move, turning_phase, acpl, analysed_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (game_id, "Stockfish 19", DEPTH, counts["Inaccuracy"], counts["Mistake"], counts["Blunder"],
+        (game_id, engine.id.get("name", "Stockfish"), DEPTH, counts["Inaccuracy"], counts["Mistake"], counts["Blunder"],
          first_blunder,
          worst[0] if worst and worst[1] >= 0.10 else None,
          worst[4] if worst and worst[1] >= 0.10 else None,
@@ -152,7 +153,7 @@ def main():
         todo = todo[:limit]
     print(f"{len(todo)} games to analyse at depth {DEPTH}", flush=True)
 
-    engine = chess.engine.SimpleEngine.popen_uci(str(ENGINE_PATH))
+    engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
     engine.configure({"Threads": THREADS, "Hash": HASH_MB})
     start = time.time()
     try:
