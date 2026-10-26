@@ -377,7 +377,7 @@
     var bpg = cur.filter(function(g){ return g.blunders!=null; });
     var curBpg = bpg.length ? bpg.reduce(function(a,g){ return a+g.blunders; },0)/bpg.length : null;
     var prevBpg = prevClosed ? prevClosed.engine.blunders/prevClosed.engine.games : null;
-    var sc = score(curMonth);
+    var sc = score({w:curMonth.w, d:curMonth.d, n:curMonth.games});
     $('now-kpis').innerHTML =
       '<div><div class="k">Games</div><div class="v">'+(curMonth.games||0)+'</div><div class="s">'+(curMonth.w||0)+'W '+(curMonth.l||0)+'L '+(curMonth.d||0)+'D</div></div>'+
       '<div><div class="k">Net</div><div class="v '+cls(curMonth.net||0)+'">'+sgn(curMonth.net||0)+'</div><div class="s">from '+(curMonth.start||'—')+'</div></div>'+
