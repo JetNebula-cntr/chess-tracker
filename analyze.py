@@ -7,6 +7,9 @@ Resumable: commits after every game, so it can be stopped and restarted.
     python3 analyze.py --limit 5      # just a few (for testing)
     python3 analyze.py --redo         # re-analyse everything (e.g. new depth)
 
+The most recent games are also re-analysed once if they predate the
+best_san column, so the page's game write-ups can name the better move.
+
 Judgments follow Lichess: a move is graded by how much it drops my
 winning chances (not raw centipawns), so a slip in an already-won or
 already-lost position is not over-counted.
@@ -30,6 +33,7 @@ THREADS = int(os.environ.get("STOCKFISH_THREADS", "6"))
 HASH_MB = 256
 CP_CAP = 1000
 MATE_CP = 10_000
+BACKFILL_RECENT = 20        # newest games to re-analyse for best moves
 OPENING_LAST_MOVE = 15      # moves 1-15 count as the opening
 ENDGAME_MATERIAL = 26       # both sides' non-pawn material (N/B=3, R=5, Q=9) at or below this
 
@@ -68,10 +72,11 @@ def phase(board, fullmove):
 
 
 def evaluate(engine, board):
-    """Score from White's point of view: (cp, mate) with cp mate-adjusted."""
+    """Score from White's point of view, (cp, mate, best move), cp mate-adjusted."""
     info = engine.analyse(board, chess.engine.Limit(depth=DEPTH))
     score = info["score"].white()
-    return score.score(mate_score=MATE_CP), score.mate()
+    pv = info.get("pv") or [None]
+    return score.score(mate_score=MATE_CP), score.mate(), pv[0]
 
 
 def analyse_game(engine, db, game_id, color, moves_san):
@@ -79,7 +84,7 @@ def analyse_game(engine, db, game_id, color, moves_san):
     board = chess.Board()
     sign = 1 if me_white else -1
 
-    cp_before, _ = evaluate(engine, board)
+    cp_before, _, best = evaluate(engine, board)
     move_updates = []
     my_moves = []  # (fullmove, drop, cp_loss, judgment, phase)
 
@@ -87,13 +92,14 @@ def analyse_game(engine, db, game_id, color, moves_san):
         mover_is_me = (ply % 2 == 1) == me_white
         fullmove = board.fullmove_number
         ph = phase(board, fullmove)
+        best_san = board.san(best) if best else None
         board.push_san(san)
         if board.is_checkmate():
-            cp_after, mate_after = (MATE_CP if board.turn == chess.BLACK else -MATE_CP), 0
+            cp_after, mate_after, best = (MATE_CP if board.turn == chess.BLACK else -MATE_CP), 0, None
         elif board.is_game_over():
-            cp_after, mate_after = 0, None
+            cp_after, mate_after, best = 0, None, None
         else:
-            cp_after, mate_after = evaluate(engine, board)
+            cp_after, mate_after, best = evaluate(engine, board)
 
         cp_loss = judgment = None
         if mover_is_me:
@@ -113,11 +119,11 @@ def analyse_game(engine, db, game_id, color, moves_san):
                 drop = max(drop, 0.30 if judgment == "Blunder" else 0.20 if judgment == "Mistake" else 0.10)
             my_moves.append((fullmove, drop, cp_loss, judgment, ph))
 
-        move_updates.append((cp_after, mate_after, cp_loss, judgment, game_id, ply))
+        move_updates.append((cp_after, mate_after, cp_loss, judgment, best_san, game_id, ply))
         cp_before = cp_after
 
     db.executemany(
-        "UPDATE moves SET engine_cp=?, engine_mate=?, cp_loss=?, judgment=? WHERE game_id=? AND ply=?",
+        "UPDATE moves SET engine_cp=?, engine_mate=?, cp_loss=?, judgment=?, best_san=? WHERE game_id=? AND ply=?",
         move_updates,
     )
 
@@ -147,7 +153,11 @@ def main():
     redo = "--redo" in sys.argv
 
     db = sqlite3.connect(DB_PATH)
-    where = "" if redo else "WHERE id NOT IN (SELECT game_id FROM analysis)"
+    if "best_san" not in [r[1] for r in db.execute("PRAGMA table_info(moves)")]:
+        db.execute("ALTER TABLE moves ADD COLUMN best_san TEXT")  # engine's choice before this ply
+    where = "" if redo else f"""WHERE id NOT IN (SELECT game_id FROM analysis)
+        OR (id IN (SELECT id FROM games ORDER BY created_at DESC LIMIT {BACKFILL_RECENT})
+            AND NOT EXISTS (SELECT 1 FROM moves m WHERE m.game_id = games.id AND m.best_san IS NOT NULL))"""
     todo = db.execute(f"SELECT id, color, moves_san FROM games {where} ORDER BY created_at").fetchall()
     if limit:
         todo = todo[:limit]

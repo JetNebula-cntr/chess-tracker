@@ -53,7 +53,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release download data -p jetnebula.db
-          echo "BEFORE=$(python -c "import sqlite3; print(sqlite3.connect('jetnebula.db').execute('SELECT (SELECT COUNT(*) FROM games), (SELECT COUNT(*) FROM analysis)').fetchone())")" >> "$GITHUB_ENV"
+          echo "BEFORE=$(python -c "import sqlite3; print(sqlite3.connect('jetnebula.db').execute('SELECT (SELECT COUNT(*) FROM games), (SELECT COUNT(*) FROM analysis), (SELECT COUNT(best_san) FROM moves)').fetchone())")" >> "$GITHUB_ENV"
 
       - name: Fetch new games
         if: github.event_name != 'push'
@@ -71,13 +71,14 @@ jobs:
           mkdir -p site
           cp page/climb.html site/index.html
           cp out/docs.json site/docs.json
+          cp -r out/boards site/boards
 
       - name: Upload database
         if: github.event_name != 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          after=$(python -c "import sqlite3; print(sqlite3.connect('jetnebula.db').execute('SELECT (SELECT COUNT(*) FROM games), (SELECT COUNT(*) FROM analysis)').fetchone())")
+          after=$(python -c "import sqlite3; print(sqlite3.connect('jetnebula.db').execute('SELECT (SELECT COUNT(*) FROM games), (SELECT COUNT(*) FROM analysis), (SELECT COUNT(best_san) FROM moves)').fetchone())")
           if [ "$after" = "$BEFORE" ]; then
             echo "No new games"
           else

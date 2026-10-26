@@ -95,6 +95,14 @@
   .delta{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:600;font-size:14px;text-align:right;}
   .game-note{grid-column:1/-1;font-size:13.5px;color:var(--ink-2);line-height:1.55;}
   .chips{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;}
+  .board{grid-column:1/-1;margin:6px 0 2px;}
+  .board img{display:block;width:100%;max-width:280px;height:auto;border-radius:6px;}
+  .board figcaption{font-size:12px;color:var(--ink-3);line-height:1.45;margin-top:6px;max-width:280px;}
+  details.game-more{grid-column:1/-1;}
+  details.game-more summary{cursor:pointer;font-size:12.5px;color:var(--accent);list-style:none;}
+  details.game-more summary::-webkit-details-marker{display:none;}
+  details.game-more[open] summary{margin-bottom:6px;}
+  .themes li .board{margin-top:10px;}
   .chip{font-family:var(--font-mono);font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);border:1px solid var(--border);}
   .chip.eng{color:var(--bad);border-color:transparent;background:var(--bad-bg);}
   .chip.eng.clean{color:var(--good);background:var(--good-bg);}
@@ -443,7 +451,9 @@
         '<span><a class="opp" href="https://lichess.org/'+esc(g.id)+'" target="_blank" rel="noopener">'+esc(g.opp)+'</a> <span class="meta">'+esc(g.oppRating)+'</span>'+
         '<div class="meta">'+monLabel(g.month)+' game '+g.num+' · '+g.color+' · '+day(g.createdAt)+' · '+esc(g.opening)+'</div></span>'+
         '<span class="delta '+cls(g.delta)+'">'+sgn(g.delta)+'</span>'+
+        (g.writeup?'<div class="game-note">'+esc(g.writeup)+'</div>':'')+
         (g.note?'<div class="game-note">'+g.note+'</div>':'')+
+        (g.board?'<details class="game-more"><summary>Show the turning point ▸</summary>'+boardFig(g.board, g.caption)+'</details>':'')+
         (chips.length?'<div class="chips">'+chips.join('')+'</div>':'')+
       '</div>';
     }).join('') : '<div class="state">No annotated games yet.</div>';
@@ -505,12 +515,21 @@
     }).join('');
   }
 
+  function boardFig(src, caption){
+    return '<figure class="board"><img src="'+esc(src)+'" alt="'+esc(caption||'Chess position')+'" loading="lazy" width="280" height="280">'+
+      (caption?'<figcaption>'+esc(caption)+'</figcaption>':'')+'</figure>';
+  }
+  function themeItem(x){
+    if (typeof x === 'string') return '<li>'+x+'</li>';
+    return '<li>'+x.text+(x.board?boardFig(x.board, x.caption):'')+'</li>';
+  }
+
   function renderThemes(){
     var t = S.themes;
     if (!t) return;
     $('themes-sub').textContent = (t.source==='calculated' ? 'calculated from all '+t.games+' games · ' : 'as of ')+day(new Date(t.asOf+'T12:00:00').getTime());
-    $('working').innerHTML = (t.working||[]).map(function(x){ return '<li>'+x+'</li>'; }).join('');
-    $('watch').innerHTML = (t.watch||[]).map(function(x){ return '<li>'+x+'</li>'; }).join('');
+    $('working').innerHTML = (t.working||[]).map(themeItem).join('');
+    $('watch').innerHTML = (t.watch||[]).map(themeItem).join('');
   }
 
   var pending=false;

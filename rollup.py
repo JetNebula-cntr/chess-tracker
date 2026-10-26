@@ -10,15 +10,20 @@ figures are sums); the current month keeps one document per game.
 """
 import json
 import math
+import shutil
 import sqlite3
 import sys
 import time
 from collections import defaultdict
 from pathlib import Path
 
+import chess
+import chess.svg
+
 DIR = Path(__file__).resolve().parent
 DB_PATH = DIR / "jetnebula.db"
 OUT = DIR / "out" / "docs.json"
+BOARDS = DIR / "out" / "boards"
 CONFIG = DIR / "config.json"
 SESSION_GAP_MS = 60 * 60 * 1000
 SHORT_MOVES = 20
@@ -79,7 +84,164 @@ def sample(n):
     return f"{n} games" + (" (small sample, so treat it as a hint)" if n < SMALL_SAMPLE else "")
 
 
-def build_themes(rows):
+# --- Boards and game write-ups -------------------------------------------------
+
+BOARD_COLORS = {"square light": "#ECE8F6", "square dark": "#9A8ED6",
+                "square light lastmove": "#F3E3B0", "square dark lastmove": "#D2B66A",
+                "margin": "#2A2640", "coord": "#ECE8F6"}
+PLAYED_ARROW = "#D03A3ACC"
+BEST_ARROW = "#22A05ACC"
+ENDINGS = {"mate": "checkmate", "resign": "resignation", "outoftime": "time running out",
+           "draw": "agreement", "stalemate": "stalemate", "timeout": "time running out"}
+
+
+def save_board(name, board, white_bottom, arrows=()):
+    BOARDS.mkdir(parents=True, exist_ok=True)
+    svg = chess.svg.board(board, orientation=chess.WHITE if white_bottom else chess.BLACK,
+                          arrows=list(arrows), size=320, colors=BOARD_COLORS)
+    (BOARDS / f"{name}.svg").write_text(svg)
+    return f"boards/{name}.svg"
+
+
+def move_label(ply, san):
+    n = (ply + 1) // 2
+    return f"{n}.{san}" if ply % 2 else f"{n}...{san}"
+
+
+def move_list(sans):
+    return " ".join(f"{(i // 2) + 1}.{s}" if i % 2 == 0 else s for i, s in enumerate(sans))
+
+
+def win_chance(cp):
+    return 2 / (1 + math.exp(-0.00368208 * cp)) - 1
+
+
+def describe(cp):
+    """An evaluation, from my side, in plain words."""
+    if cp >= 9000:
+        return "a forced mate for you"
+    if cp <= -9000:
+        return "a forced mate against you"
+    p = cp / 100
+    if p >= 3:
+        return f"winning for you ({p:+.1f})"
+    if p >= 1.2:
+        return f"better for you ({p:+.1f})"
+    if p > -1.2:
+        return f"about equal ({p:+.1f})"
+    if p > -3:
+        return f"worse for you ({p:+.1f})"
+    return f"losing for you ({p:+.1f})"
+
+
+def game_writeup(db, g):
+    """Plain-English summary of one game from the engine data, plus a board of its turning point."""
+    moves = db.execute("SELECT ply, san, mine, engine_cp, best_san FROM moves WHERE game_id=? ORDER BY ply",
+                       (g["id"],)).fetchall()
+    if not moves or any(m["engine_cp"] is None for m in moves):
+        return None, None, None
+    sign = 1 if g["color"] == "white" else -1
+    me_side, opp_side = g["color"].capitalize(), ("Black" if g["color"] == "white" else "White")
+    before = [20] + [m["engine_cp"] for m in moves[:-1]]  # eval before each ply, White's view
+
+    def swing(i):
+        """How much ply i cut the mover's winning chances."""
+        mover = 1 if moves[i]["ply"] % 2 else -1
+        return win_chance(mover * before[i]) - win_chance(mover * moves[i]["engine_cp"])
+
+    mine = [i for i, m in enumerate(moves) if m["mine"]]
+    theirs = [i for i, m in enumerate(moves) if not m["mine"]]
+    opening = g["opening"] or "an unnamed opening"
+    parts = [f"{opening}, with you as {me_side}."]
+
+    if g["result"] == "W" and theirs:
+        key, whose = max(theirs, key=swing), "their"
+    elif mine:
+        key, whose = max(mine, key=swing), "your"
+    else:
+        return None, None, None
+    m = moves[key]
+    if swing(key) < 0.10:
+        parts.append("Neither side made a clear error; it was decided by small edges.")
+        key = None
+    else:
+        label = move_label(m["ply"], m["san"])
+        was, now = describe(sign * before[key]), describe(sign * m["engine_cp"])
+        if whose == "your":
+            parts.append(f"The game turned on {label}: the position went from {was} to {now}.")
+            if m["best_san"] and m["best_san"] != m["san"]:
+                parts.append(f"Stockfish preferred {move_label(m['ply'], m['best_san'])}.")
+        else:
+            parts.append(f"{opp_side}'s key mistake was {label}, which took the position from {was} to {now}.")
+            if m["best_san"] and m["best_san"] != m["san"]:
+                parts.append(f"They needed {move_label(m['ply'], m['best_san'])}.")
+            slip = max(mine, key=swing) if mine else None
+            if slip is not None and swing(slip) >= 0.30:
+                parts.append(f"You had your own scare with {move_label(moves[slip]['ply'], moves[slip]['san'])}, "
+                             f"but they didn't punish it.")
+
+    blunders = g["blunders"]
+    if blunders:
+        first = g["first_blunder_move"]
+        parts.append(f"You made {blunders} blunder{'s' if blunders != 1 else ''}"
+                     + (f", the first on move {first}." if first else "."))
+    elif blunders == 0:
+        parts.append("You made no blunders.")
+    ending = ENDINGS.get(g["status"], g["status"])
+    last = (len(moves) + 1) // 2
+    result = {"W": "You won", "L": "You lost", "D": "It was drawn"}[g["result"]]
+    parts.append(f"{result} by {ending} on move {last}.")
+
+    board = caption = None
+    if key is not None:
+        pos = chess.Board()
+        for mv in moves[:key]:
+            pos.push_san(mv["san"])
+        played = pos.parse_san(m["san"])
+        arrows = [chess.svg.Arrow(played.from_square, played.to_square, color=PLAYED_ARROW)]
+        if m["best_san"] and m["best_san"] != m["san"]:
+            best = pos.parse_san(m["best_san"])
+            arrows.append(chess.svg.Arrow(best.from_square, best.to_square, color=BEST_ARROW))
+        board = save_board(f"game-{g['id']}", pos, g["color"] == "white", arrows)
+        who = "you" if whose == "your" else "they"
+        caption = (f"Before {move_label(m['ply'], m['san'])}. Red is what {who} played"
+                   + (", green is what Stockfish preferred." if len(arrows) > 1 else "."))
+    return " ".join(parts), board, caption
+
+
+def opening_board(db, family, games):
+    """The family's most common position at the end of its named opening moves."""
+    seen = {}
+    for g in games:
+        raw = json.loads(g["raw_json"])
+        ply = (raw.get("opening") or {}).get("ply")
+        sans = (g["moves_san"] or "").split()[:ply or 0]
+        if not ply or len(sans) < ply:
+            continue
+        pos = chess.Board()
+        for s in sans:
+            pos.push_san(s)
+        key = pos.board_fen()
+        if key not in seen:
+            seen[key] = {"count": 0, "sans": sans, "name": raw["opening"]["name"], "white": 0}
+        seen[key]["count"] += 1
+        seen[key]["white"] += g["color"] == "white"
+    if not seen:
+        return None, None
+    top = max(seen.values(), key=lambda v: v["count"])
+    pos = chess.Board()
+    for s in top["sans"]:
+        pos.push_san(s)
+    slug = "".join(c if c.isalnum() else "-" for c in family.lower()).strip("-")
+    path = save_board(f"opening-{slug}", pos, top["white"] * 2 >= top["count"])
+    return path, f"{top['name']}: {move_list(top['sans'])}"
+
+
+def day_label(ms):
+    return time.strftime("%b %-d", time.localtime(ms / 1000))
+
+
+def build_themes(db, rows):
     """Patterns computed from the whole game history, rebuilt on every run.
 
     Each candidate gets a weight (roughly: points of score difference, scaled by
@@ -91,8 +253,11 @@ def build_themes(rows):
         return {"asOf": time.strftime("%Y-%m-%d"), "source": "calculated", "working": [], "watch": []}
     overall = pct(games)
 
-    def add(col, weight, text):
-        col.append((weight, text))
+    def add(col, weight, text, board=None, caption=None):
+        item = {"text": text}
+        if board:
+            item.update(board=board, caption=caption)
+        col.append((weight, item))
 
     # Colour.
     white = [g for g in games if g["color"] == "white"]
@@ -116,11 +281,13 @@ def build_themes(rows):
         bs, ws = pct(fam[best]), pct(fam[worst])
         if bs - overall >= 5:
             add(working, (bs - overall) * min(1, len(fam[best]) / 20),
-                f"<b>{best} is your best-scoring opening.</b> {bs}% across {sample(len(fam[best]))}, against your {overall}% overall.")
+                f"<b>{best} is your best-scoring opening.</b> {bs}% across {sample(len(fam[best]))}, against your {overall}% overall.",
+                *opening_board(db, best, fam[best]))
         if overall - ws >= 5 and worst != best:
             add(watch, (overall - ws) * min(1, len(fam[worst]) / 20),
                 f"<b>{worst} is your weakest opening.</b> {ws}% across {sample(len(fam[worst]))}, against your {overall}% overall. "
-                f"Worth studying or swapping out.")
+                f"Worth studying or swapping out.",
+                *opening_board(db, worst, fam[worst]))
 
     # Session position.
     slots = defaultdict(list)
@@ -186,9 +353,16 @@ def build_themes(rows):
             top = max(set(turned), key=turned.count)
             share = round(turned.count(top) / len(turned) * 100)
             if share >= 45:
+                example = next((g for g in reversed(analysed)
+                                if g["result"] != "W" and g["turning_phase"] == top), None)
+                board = caption = None
+                if example is not None:
+                    _, board, caption = game_writeup(db, example)
+                    if caption:
+                        caption = f"Example from {day_label(example['created_at'])} vs {example['opp_name']}. {caption}"
                 add(watch, share - 33,
                     f"<b>Most losses turn in the {top}.</b> In {share}% of your losses and draws ({len(turned)} games), "
-                    f"the single most costly move came in the {top}.")
+                    f"the single most costly move came in the {top}.", board, caption)
 
     # Finishing with mate.
     mates = [g for g in games if g["result"] == "W" and g["status"] == "mate"]
@@ -198,7 +372,7 @@ def build_themes(rows):
             f"<b>You finish attacks.</b> {len(mates)} of your {len(wins)} wins ended in checkmate rather than resignation or time.")
 
     def top(col):
-        return [t for _, t in sorted(col, key=lambda x: -x[0])[:4]]
+        return [item for _, item in sorted(col, key=lambda x: -x[0])[:5]]
 
     return {"asOf": time.strftime("%Y-%m-%d"), "source": "calculated", "games": len(games),
             "working": top(working), "watch": top(watch)}
@@ -209,6 +383,7 @@ def main():
     cfg = json.loads(CONFIG.read_text()) if CONFIG.exists() else {}
 
     db = sqlite3.connect(DB_PATH)
+    shutil.rmtree(BOARDS, ignore_errors=True)
     db.row_factory = sqlite3.Row
     games = db.execute("""
         SELECT g.*, a.blunders, a.mistakes, a.inaccuracies, a.acpl, a.first_blunder_move,
@@ -327,11 +502,13 @@ def main():
     # The last N games played, with a note where one exists.
     for g, _, num in rows[-NOTES_SHOWN:]:
         n = notes.get(g["id"])
+        writeup, board, caption = game_writeup(db, g)
         docs.append({"path": f"recent/{g['id']}", "data": {
             "id": g["id"], "month": g["month"], "num": num, "createdAt": g["created_at"],
             "color": g["color"], "result": g["result"], "delta": g["rating_diff"],
             "rating": g["rating_after"], "opp": g["opp_name"], "oppRating": g["opp_rating"],
             "opening": g["opening"], "note": n["note"] if n else None,
+            "writeup": writeup, "board": board, "caption": caption,
             "tags": json.loads(n["tags"] or "[]") if n else [],
             "blunders": g["blunders"], "turningPhase": g["turning_phase"],
         }})
@@ -348,7 +525,7 @@ def main():
         "generatedAt": int(time.time() * 1000), "schemaVersion": 1,
         "notesKept": sorted(keep),
     }})
-    docs.append({"path": "themes/current", "data": build_themes(rows)})
+    docs.append({"path": "themes/current", "data": build_themes(db, rows)})
 
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(json.dumps(docs, indent=1))
