@@ -62,6 +62,148 @@ def month_range(first, last):
     return out
 
 
+SMALL_SAMPLE = 10
+MIN_OPENING_GAMES = 8
+RECENT = 20
+
+
+def pct(games):
+    """Score as a percentage: wins plus half of draws."""
+    if not games:
+        return None
+    pts = sum(1 if g["result"] == "W" else 0.5 if g["result"] == "D" else 0 for g in games)
+    return round(pts / len(games) * 100)
+
+
+def sample(n):
+    return f"{n} games" + (" (small sample, so treat it as a hint)" if n < SMALL_SAMPLE else "")
+
+
+def build_themes(rows):
+    """Patterns computed from the whole game history, rebuilt on every run.
+
+    Each candidate gets a weight (roughly: points of score difference, scaled by
+    how much evidence is behind it); the strongest few go in each column.
+    """
+    games = [g for g, _, _ in rows]
+    working, watch = [], []
+    if len(games) < 10:
+        return {"asOf": time.strftime("%Y-%m-%d"), "source": "calculated", "working": [], "watch": []}
+    overall = pct(games)
+
+    def add(col, weight, text):
+        col.append((weight, text))
+
+    # Colour.
+    white = [g for g in games if g["color"] == "white"]
+    black = [g for g in games if g["color"] == "black"]
+    w, b = pct(white), pct(black)
+    if w is not None and b is not None and abs(w - b) >= 5:
+        strong, weak = (("White", w, len(white)), ("Black", b, len(black))) if w > b else (("Black", b, len(black)), ("White", w, len(white)))
+        add(working, abs(w - b), f"<b>{strong[0]} is your stronger side.</b> {strong[1]}% as {strong[0]} across {sample(strong[2])}, "
+            f"against {weak[1]}% as {weak[0]} across {weak[2]}.")
+        add(watch, abs(w - b), f"<b>{weak[0]} is where more of the losses are.</b> {weak[1]}% as {weak[0]}, "
+            f"{strong[1] - weak[1]} points behind your {strong[0]} games ({weak[2]} games).")
+
+    # Openings, by family.
+    fam = defaultdict(list)
+    for g in games:
+        fam[opening_family(g["opening"])].append(g)
+    fam = {k: v for k, v in fam.items() if len(v) >= MIN_OPENING_GAMES}
+    if fam:
+        best = max(fam, key=lambda k: pct(fam[k]))
+        worst = min(fam, key=lambda k: pct(fam[k]))
+        bs, ws = pct(fam[best]), pct(fam[worst])
+        if bs - overall >= 5:
+            add(working, (bs - overall) * min(1, len(fam[best]) / 20),
+                f"<b>{best} is your best-scoring opening.</b> {bs}% across {sample(len(fam[best]))}, against your {overall}% overall.")
+        if overall - ws >= 5 and worst != best:
+            add(watch, (overall - ws) * min(1, len(fam[worst]) / 20),
+                f"<b>{worst} is your weakest opening.</b> {ws}% across {sample(len(fam[worst]))}, against your {overall}% overall. "
+                f"Worth studying or swapping out.")
+
+    # Session position.
+    slots = defaultdict(list)
+    for g, pos, _ in rows:
+        slots[str(pos) if pos < 5 else "5+"].append(g)
+    early = slots["1"] + slots["2"] + slots["3"] + slots["4"]
+    late = slots["5+"]
+    if late and early:
+        e, l = pct(early), pct(late)
+        if e - l >= 8:
+            add(watch, (e - l) * min(1, len(late) / 15),
+                f"<b>Long sessions cost you.</b> {l}% from the fifth game of a session on ({sample(len(late))}), "
+                f"against {e}% in games one to four. Stopping after four is the easy fix.")
+    if slots["1"] and pct(slots["1"]) - overall >= 4:
+        add(working, (pct(slots["1"]) - overall) * min(1, len(slots["1"]) / 30),
+            f"<b>Your first game of a session is your best.</b> {pct(slots['1'])}% across {sample(len(slots['1']))}.")
+
+    # Short games.
+    short = [g for g in games if math.ceil(g["plies"] / 2) < SHORT_MOVES]
+    if len(short) >= 5:
+        s, net = pct(short), sum(g["rating_diff"] or 0 for g in short)
+        if s < overall - 5 and net < 0:
+            add(watch, (overall - s) * min(1, len(short) / 20),
+                f"<b>Games that end before move {SHORT_MOVES} are costly.</b> {len(short)} of them, scoring {s}% "
+                f"for a net of {net:+d} rating points. Most early losses come from one missed tactic, so slow down in the opening.")
+
+    # Recent form.
+    if len(games) >= RECENT * 2:
+        last, prev = games[-RECENT:], games[-RECENT * 2:-RECENT]
+        lp, pp = pct(last), pct(prev)
+        start = last[0]["rating_before"]
+        end = last[-1]["rating_after"]
+        if start is not None and end is not None:
+            change = end - start
+            line = f"{lp}% over your last {RECENT} games ({change:+d} rating), against {pp}% in the {RECENT} before."
+            if lp - pp >= 8 or change >= 25:
+                add(working, max(lp - pp, change / 3), f"<b>Your recent form is up.</b> {line}")
+            elif pp - lp >= 8 or change <= -25:
+                add(watch, max(pp - lp, -change / 3), f"<b>Your recent form has dipped.</b> {line}")
+
+    # Higher-rated opponents.
+    higher = [g for g in games if (g["opp_rating"] or 0) - (g["rating_before"] or 0) >= 50]
+    if len(higher) >= 8 and pct(higher) >= 45:
+        add(working, (pct(higher) - 40) * min(1, len(higher) / 20),
+            f"<b>You hold up against stronger players.</b> {pct(higher)}% against opponents rated 50+ above you ({sample(len(higher))}).")
+
+    # Engine: blunder trend and where losses turn.
+    analysed = [g for g in games if g["blunders"] is not None]
+    if len(analysed) >= 30:
+        recent = analysed[-RECENT:]
+        r_avg = sum(g["blunders"] for g in recent) / len(recent)
+        all_avg = sum(g["blunders"] for g in analysed) / len(analysed)
+        if r_avg <= all_avg * 0.8:
+            add(working, (1 - r_avg / all_avg) * 30,
+                f"<b>You are blundering less.</b> {r_avg:.1f} blunders a game over your last {len(recent)} games, "
+                f"down from {all_avg:.1f} across all {len(analysed)} analysed games.")
+        elif r_avg >= all_avg * 1.2:
+            add(watch, (r_avg / all_avg - 1) * 30,
+                f"<b>Blunders have crept up.</b> {r_avg:.1f} a game over your last {len(recent)} games, "
+                f"against {all_avg:.1f} across all {len(analysed)} analysed games.")
+        turned = [g["turning_phase"] for g in analysed if g["result"] != "W" and g["turning_phase"]]
+        if len(turned) >= 10:
+            top = max(set(turned), key=turned.count)
+            share = round(turned.count(top) / len(turned) * 100)
+            if share >= 45:
+                add(watch, share - 33,
+                    f"<b>Most losses turn in the {top}.</b> In {share}% of your losses and draws ({len(turned)} games), "
+                    f"the single most costly move came in the {top}.")
+
+    # Finishing with mate.
+    mates = [g for g in games if g["result"] == "W" and g["status"] == "mate"]
+    wins = [g for g in games if g["result"] == "W"]
+    if wins and len(mates) / len(wins) >= 0.3:
+        add(working, len(mates) / len(wins) * 20,
+            f"<b>You finish attacks.</b> {len(mates)} of your {len(wins)} wins ended in checkmate rather than resignation or time.")
+
+    def top(col):
+        return [t for _, t in sorted(col, key=lambda x: -x[0])[:4]]
+
+    return {"asOf": time.strftime("%Y-%m-%d"), "source": "calculated", "games": len(games),
+            "working": top(working), "watch": top(watch)}
+
+
 def main():
     as_of = sys.argv[sys.argv.index("--as-of") + 1] if "--as-of" in sys.argv else time.strftime("%Y-%m")
     cfg = json.loads(CONFIG.read_text()) if CONFIG.exists() else {}
@@ -182,6 +324,18 @@ def main():
             "blunders": g["blunders"], "turningPhase": g["turning_phase"],
         }})
 
+    # The last N games played, with a note where one exists.
+    for g, _, num in rows[-NOTES_SHOWN:]:
+        n = notes.get(g["id"])
+        docs.append({"path": f"recent/{g['id']}", "data": {
+            "id": g["id"], "month": g["month"], "num": num, "createdAt": g["created_at"],
+            "color": g["color"], "result": g["result"], "delta": g["rating_diff"],
+            "rating": g["rating_after"], "opp": g["opp_name"], "oppRating": g["opp_rating"],
+            "opening": g["opening"], "note": n["note"] if n else None,
+            "tags": json.loads(n["tags"] or "[]") if n else [],
+            "blunders": g["blunders"], "turningPhase": g["turning_phase"],
+        }})
+
     last = games[-1] if games else None
     settled = [g["rating_after"] for g in games if not g["provisional"]]
     docs.append({"path": "meta/summary", "data": {
@@ -194,9 +348,7 @@ def main():
         "generatedAt": int(time.time() * 1000), "schemaVersion": 1,
         "notesKept": sorted(keep),
     }})
-    themes = DIR / "themes.json"
-    if themes.exists():
-        docs.append({"path": "themes/current", "data": json.loads(themes.read_text())})
+    docs.append({"path": "themes/current", "data": build_themes(rows)})
 
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(json.dumps(docs, indent=1))
