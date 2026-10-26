@@ -39,8 +39,10 @@ step() {
   fi
 }
 
-step load load.py && step analyze analyze.py && step rollup rollup.py
+step load load.py && step analyze analyze.py && step rollup rollup.py && step publish-plan publish.py plan
 V2=$?
+# Writing to the page's db needs an interactive Claude session (headless runs
+# and routines lack the tool), so pending batches wait for publish_prompt.md.
 
 /bin/bash "$HOME/lichess/sync.sh" || log "ERROR v1 sync failed, see ~/lichess/sync.log"
 
